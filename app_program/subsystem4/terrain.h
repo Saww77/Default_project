@@ -31,7 +31,10 @@ void terrain_hump_reset(hump_t *hump);
 void terrain_hump_update(hump_t *hump, int slope_millideg, unsigned distance_mm,
                          uint32_t position_mm, bool valid, bool moving);
 
+bool terrain_impact_sample(bool armed, int norm_sq, int up, int left, uint8_t *impacts);
+
 bool terrain_start(void);
+void terrain_set_armed(bool armed);
 terrain_sample_t terrain_sample(void);
 void terrain_begin_run(void);
 

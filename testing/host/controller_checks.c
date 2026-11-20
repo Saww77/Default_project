@@ -10,6 +10,7 @@ volatile uint8_t car_faults;
 static int last_move;
 static int last_turn;
 static bool braking;
+static bool impact_armed;
 static int requested_speed[2];
 static unsigned scan_requests;
 static line_sample_t line;
@@ -31,6 +32,7 @@ bool hardware_button_held(void) { return true; }
 bool hardware_estop_held(void) { return false; }
 void line_read_barcode(bool enabled) { (void)enabled; }
 void line_calibrate(unsigned surface) { (void)surface; }
+void terrain_set_armed(bool armed) { impact_armed = armed; }
 void terrain_begin_run(void) { }
 int tm_printf(UB *format, ...) { (void)format; return 0; }
 void sonar_scan(void) { ++scan_requests; }
@@ -62,7 +64,7 @@ static void check_junction(void)
 
     mission.phase = CAR_READY;
     button(now, line, terrain, motion);
-    assert(mission.phase == CAR_FOLLOW);
+    assert(mission.phase == CAR_FOLLOW && impact_armed);
     set_letter('A');
     navigate(line, motion, now);
     assert(mission.route == ROUTE_LEFT && mission.phase == CAR_FOLLOW && last_turn == 0);
@@ -91,7 +93,7 @@ static void check_junction(void)
     navigate(line, motion, now);
     motion.travelled_mm += JUNCTION_WINDOW_MM + 1;
     navigate(line, motion, now);
-    assert(mission.phase == CAR_STOPPED && braking && (car_faults & FAULT_PATH));
+    assert(mission.phase == CAR_STOPPED && braking && !impact_armed && (car_faults & FAULT_PATH));
 }
 
 static void check_avoidance(void)
@@ -141,12 +143,12 @@ static void check_avoidance(void)
     for (unsigned i = 0; i < 4; ++i) {
         recover(MOVE_IDLE, line, line.time_us);
     }
-    assert(mission.phase == CAR_FOLLOW);
+    assert(mission.phase == CAR_FOLLOW && impact_armed);
 
     mission.phase = CAR_DETOUR;
     mission.detour = DETOUR_PAST;
     update_range((range_t){.range_mm = 80}, 18000000);
-    assert(mission.phase == CAR_STOPPED && braking && (car_faults & FAULT_PATH));
+    assert(mission.phase == CAR_STOPPED && braking && !impact_armed && (car_faults & FAULT_PATH));
 }
 
 static void check_tracking(void)

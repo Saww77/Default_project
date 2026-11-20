@@ -92,6 +92,13 @@ static void check_terrain(void)
 {
     hump_t hump = {0};
     uint32_t position = 0u;
+    uint8_t impacts = 1u;
+    assert(!terrain_impact_sample(false, 0, 0, 0, &impacts) && impacts == 0u);
+    assert(!terrain_impact_sample(false, 6000000, 800, 1000, &impacts));
+    assert(!terrain_impact_sample(true, 4900000, 1000, 0, &impacts));
+    assert(terrain_impact_sample(true, 4900000, 1000, 0, &impacts));
+    assert(!terrain_impact_sample(false, 4900000, 1000, 0, &impacts) && impacts == 0u);
+    assert(terrain_impact_sample(true, 1000000, 100, 0, &impacts));
 
     assert(terrain_atan(1000, 1000) == 45000);
     assert(terrain_atan(1000, -1000) == 135000);

@@ -7,10 +7,12 @@
 #define ACCEL 0x19u
 #define MAG   0x1eu
 #define CAL_COUNT 64u
+#define ARM_SETTLE_SAMPLES 15u
 
 static terrain_sample_t shared;
 static ID timer;
 static volatile uint8_t run_epoch;
+static volatile bool mission_armed;
 
 static int absolute(int x)
 {
@@ -60,6 +62,11 @@ static int wrapped_delta(int next, int previous)
     return delta;
 }
 
+void terrain_set_armed(bool armed)
+{
+    mission_armed = armed;
+}
+
 void terrain_begin_run(void)
 {
     ++run_epoch;
@@ -92,7 +99,7 @@ static void terrain_task(INT argument, void *context)
     int longitudinal_q8 = 0;
     unsigned samples = 0u;
     uint8_t impacts = 0u;
-    unsigned stable_ms = 0u;
+    uint8_t settled_samples = 0u;
     uint8_t epoch = 0u;
     hump_t hump = {0};
     terrain_sample_t next = {0};
@@ -127,7 +134,6 @@ static void terrain_task(INT argument, void *context)
             if (up < 750 || up > 1250 || absolute(fwd) > 350 || absolute(left) > 350) {
                 samples = 0u;
                 bias[0] = bias[1] = bias[2] = 0;
-                if (++stable_ms >= 200u) { car_fault(FAULT_IMU); }
                 continue;
             }
             if (samples != 0u && (absolute(fwd - bias[0] / (int)samples) > 95 ||
@@ -135,7 +141,6 @@ static void terrain_task(INT argument, void *context)
                 absolute(up - bias[2] / (int)samples) > 95)) {
                 samples = 0u;
                 bias[0] = bias[1] = bias[2] = 0;
-                if (++stable_ms >= 200u) { car_fault(FAULT_IMU); }
                 continue;
             }
             bias[0] += fwd;
@@ -144,10 +149,9 @@ static void terrain_task(INT argument, void *context)
             if (++samples == CAL_COUNT) {
                 baseline = terrain_atan(bias[0] / (int)samples, bias[2] / (int)samples);
                 longitudinal_q8 = baseline * 256;
-                next.ready = true;
             }
         }
-        if (!next.ready) { continue; }
+        if (samples < CAL_COUNT) { continue; }
         motion_sample_t motion = motion_sample();
         if (epoch != run_epoch) {
             epoch = run_epoch;
@@ -158,6 +162,20 @@ static void terrain_task(INT argument, void *context)
         previous_position = motion.travelled_mm;
         int speed = motion.speed_mm_s;
         int yaw = motion.yaw_deg_s;
+        bool armed = mission_armed;
+        bool impact = terrain_impact_sample(armed, norm_sq, up, left, &impacts);
+        if (impact) { car_fault(FAULT_COLLISION); }
+
+        /* The driver has to put the car down and let it settle before arming. */
+        bool upright = absolute(fwd - bias[0] / (int)CAL_COUNT) <= 180 &&
+                       absolute(left - bias[1] / (int)CAL_COUNT) <= 180 &&
+                       absolute(up - bias[2] / (int)CAL_COUNT) <= 180;
+        if (!armed && upright && absolute(speed) <= 18 && dt_us < 30000u) {
+            if (settled_samples < ARM_SETTLE_SAMPLES) { ++settled_samples; }
+        } else {
+            settled_samples = 0u;
+        }
+        next.ready = settled_samples == ARM_SETTLE_SAMPLES;
         /* Subtract the measured change in wheel speed from longitudinal specific force. */
         int dynamic = dt_us >= 6000u && dt_us <= 25000u
                       ? (last_speed - speed) * 102000 / (int)dt_us : 0;
@@ -203,14 +221,8 @@ static void terrain_task(INT argument, void *context)
         if (selected_yaw < -512) { selected_yaw = -512; }
         next.yaw_deg_s = selected_yaw;
         next.max_hump_mm = hump.max_mm;
-        if (norm_sq > 4200000 || norm_sq < 110000) {
-            if (impacts < 2u) { ++impacts; }
-        } else {
-            impacts = 0u;
-        }
-        if (impacts >= 2u || up < 280 || absolute(left) > 850) {
+        if (impact) {
             next.event = TERRAIN_IMPACT;
-            car_fault(FAULT_COLLISION);
         } else if (absolute(slope) > 26000 || absolute(left - bias[1] / (int)samples) > 420) {
             next.event = TERRAIN_TILT;
         } else if (hump.phase == 2u) {

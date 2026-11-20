@@ -57,6 +57,7 @@ static void transition(unsigned phase, uint32_t now)
 {
     mission.phase = (uint8_t)phase;
     mission.state_at = now;
+    terrain_set_armed(phase >= CAR_FOLLOW && phase <= CAR_REACQUIRE);
     line_read_barcode(phase == CAR_FOLLOW);
 }
 
@@ -122,8 +123,16 @@ static void button(uint32_t now, line_sample_t line, terrain_sample_t terrain,
     }
     bool safe = !hardware_estop_held() && (car_faults & FATAL_FAULTS) == 0u;
     EI(key);
-    if (!safe || !terrain.ready || !line_fresh(line, now) || !line.visible) {
-        tm_printf((UB *)"Start rejected: align line, release stop, and check status\n");
+    if (!safe) {
+        tm_printf((UB *)"Start blocked by fault mask %02x. Check GP20 and dashboard.\n", car_faults);
+        return;
+    }
+    if (!terrain.ready) {
+        tm_printf((UB *)"Start blocked: leave the car upright and still until the IMU settles.\n");
+        return;
+    }
+    if (!line_fresh(line, now) || !line.visible) {
+        tm_printf((UB *)"Start blocked: align the IR line sensors on the track.\n");
         return;
     }
     mission.run_origin = motion.travelled_mm;

@@ -22,6 +22,10 @@
 static volatile uint16_t encoder_word;
 static ID echo_events;
 static bool brake_latched = true;
+static bool motor_pwm_connected;
+static const unsigned motor_pins[] = {
+    PIN_MOTOR_LEFT_A, PIN_MOTOR_LEFT_B, PIN_MOTOR_RIGHT_A, PIN_MOTOR_RIGHT_B
+};
 static volatile struct {
     uint32_t armed_at;
     uint32_t rise_at;
@@ -44,22 +48,25 @@ static void pwm_pair(unsigned pin, unsigned a, unsigned b)
 
 void hardware_brake(bool engaged)
 {
-    static const unsigned motor_pins[] = {
-        PIN_MOTOR_LEFT_A, PIN_MOTOR_LEFT_B, PIN_MOTOR_RIGHT_A, PIN_MOTOR_RIGHT_B
-    };
     UW key;
 
     DI(key);
     brake_latched = engaged || (car_faults & FATAL_FAULTS) != 0u
                  || hardware_estop_held();
     if (brake_latched) {
+        if (motor_pwm_connected) {
+            /* Force the driver inputs low before handing them back to SIO. */
+            for (unsigned i = 0; i < sizeof(motor_pins) / sizeof(motor_pins[0]); ++i) {
+                REG(CAR_GPIO_CTRL(motor_pins[i]) + 0x2000u) = OUT_FORCE_LOW;
+            }
+            for (unsigned i = 0; i < sizeof(motor_pins) / sizeof(motor_pins[0]); ++i) {
+                gpio_set_val(motor_pins[i], 0);
+                gpio_set_pin(motor_pins[i], GPIO_MODE_OUT);
+            }
+            motor_pwm_connected = false;
+        }
         pwm_pair(PIN_MOTOR_LEFT_A, 0u, 0u);
         pwm_pair(PIN_MOTOR_RIGHT_A, 0u, 0u);
-    }
-    for (unsigned i = 0; i < 4u; ++i) {
-        /* RP2040 atomic register alias, leaving the PWM mux untouched. */
-        REG(CAR_GPIO_CTRL(motor_pins[i]) + (brake_latched ? 0x2000u : 0x3000u))
-            = OUT_FORCE_LOW;
     }
     EI(key);
 }
@@ -80,6 +87,13 @@ void hardware_drive(int left, int right)
     if (!brake_latched) {
         motor(PIN_MOTOR_LEFT_A, LEFT_MOTOR_SIGN * left);
         motor(PIN_MOTOR_RIGHT_A, RIGHT_MOTOR_SIGN * right);
+        /* Idle pins stay driven low by SIO until there is an armed duty command. */
+        if (!motor_pwm_connected && (left != 0 || right != 0)) {
+            for (unsigned i = 0; i < sizeof(motor_pins) / sizeof(motor_pins[0]); ++i) {
+                (void)pwm_set_pin(motor_pins[i]);
+            }
+            motor_pwm_connected = true;
+        }
     }
     EI(key);
 }
@@ -227,15 +241,11 @@ static void pwm(unsigned pin, unsigned divider, unsigned top)
     REG(base + 8u) = 0;
     REG(base + 16u) = top;
     pwm_pair(pin, 0, 0);
-    (void)pwm_set_pin(pin);
     REG(base) = 1u;
 }
 
 bool hardware_init(void)
 {
-    static const unsigned motor_pins[] = {
-        PIN_MOTOR_LEFT_A, PIN_MOTOR_LEFT_B, PIN_MOTOR_RIGHT_A, PIN_MOTOR_RIGHT_B
-    };
     T_DINT interrupt = { .intatr = TA_HLNG, .inthdr = (FP)gpio_isr };
 
     for (unsigned i = 0; i < 4u; ++i) {
@@ -255,10 +265,9 @@ bool hardware_init(void)
     REG(0x4005802cu) = 0x20cu; /* 12 MHz crystal / 12, one microsecond */
     REG(TIM_BASE + 0x30u) = 0u;
     pwm(PIN_MOTOR_LEFT_A, 100u, PWM_TOP);
-    (void)pwm_set_pin(PIN_MOTOR_LEFT_B);
     pwm(PIN_MOTOR_RIGHT_A, 100u, PWM_TOP);
-    (void)pwm_set_pin(PIN_MOTOR_RIGHT_B);
     pwm(PIN_SERVO, 2000u, 19999u);
+    (void)pwm_set_pin(PIN_SERVO);
     hardware_brake(true);
     hardware_servo(90u);
     gpio_set_val(PIN_TRIGGER, 0);

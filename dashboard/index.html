@@ -36,7 +36,7 @@
   #stop { background: var(--danger); color: #361b14; white-space: nowrap; }
   #mapping { display: flex; gap: 7px; flex-wrap: wrap; padding: 0; margin: 18px 0; list-style: none; }
   #mapping li { background: #233329; border-radius: 5px; padding: 3px 8px; }
-  #feedback, #route-feedback, #faults { margin-top: 12px; font-size: .9rem; }
+  #feedback, #route-feedback, #faults, #setup { margin-top: 12px; font-size: .9rem; }
   @media (max-width: 700px) {
     main { margin-top: 20px; }
     .grid { grid-template-columns: 1fr; }
@@ -64,6 +64,7 @@
         <div><dt>Motion</dt><dd id="terrain">—</dd></div>
         <div><dt>Obstacle</dt><dd id="obstacle">—</dd></div>
       </dl>
+      <p id="setup" role="status" hidden></p>
       <p id="faults" role="status"></p>
     </section>
     <section class="panel" aria-labelledby="route-heading">
@@ -106,6 +107,13 @@ function render(next) {
   $("stop").disabled = !next.online;
   if (state) {
     setText("phase", state.phase);
+    let setupHint = state.setup ?? "";
+    if (state.phase === "Ready") {
+      setupHint = state.line ? "Keep the car still on the line, then tap GP21 to start."
+                             : "Place the line sensors over the track until the line is detected.";
+    }
+    $("setup").hidden = !next.online || !setupHint;
+    setText("setup", setupHint);
     setText("line", state.line ? "Detected" : "Out of view");
     setText("speed", state.speed_mm_s + " mm/s");
     setText("distance", (state.distance_mm / 1000).toFixed(2) + " m");

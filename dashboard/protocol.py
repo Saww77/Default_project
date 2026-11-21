@@ -8,6 +8,13 @@ PHASES = ("IR setup", "Ready", "Following line", "Junction", "Scanning obstacle"
 TERRAIN = ("Stationary", "Cruising", "Accelerating", "Turning", "Climbing hump",
            "Descending hump", "Tilt", "Impact")
 PLANS = ("Stop", "Continue", "Bypass left", "Bypass right", "Reverse and rescan")
+IR_SETUP_STEPS = (
+    None,
+    "Place all three IR sensors over white paper and tap GP21.",
+    "Place all three IR sensors over matte black and tap GP21.",
+    "Taking IR readings. Keep the car still.",
+    "IR contrast is too low. Put all three sensors over white and tap GP21 to retry.",
+)
 FAULTS = ("Emergency stop", "Impact", "Motor or encoder", "IMU", "Line", "Blocked path",
           "Control timing", "No ultrasonic return")
 
@@ -39,7 +46,8 @@ def decode_status(payload):
         "phase": PHASES[phase],
         "terrain": TERRAIN[terrain],
         "barcode": chr(ord("A") + barcode - 1) if barcode else None,
-        "plan": PLANS[plan] if width else None,
+        "plan": PLANS[plan] if phase != 0 and width else None,
+        "setup": IR_SETUP_STEPS[plan] if phase == 0 else None,
         "line": line,
         "magnetic_rate": magnetic,
         "faults": [name for index, name in enumerate(FAULTS) if faults & (1 << index)],

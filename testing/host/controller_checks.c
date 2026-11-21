@@ -16,6 +16,8 @@ static unsigned scan_requests;
 static line_sample_t line;
 static obstacle_t profile;
 static bool profile_valid;
+static unsigned calibration_result;
+static unsigned calibration_request;
 
 void car_fault(uint8_t faults) { car_faults |= faults; braking = true; }
 void motion_stop(void) { braking = true; }
@@ -31,7 +33,8 @@ bool motion_turn(int degrees) { last_turn = degrees; braking = false; return tru
 bool hardware_button_held(void) { return true; }
 bool hardware_estop_held(void) { return false; }
 void line_read_barcode(bool enabled) { (void)enabled; }
-void line_calibrate(unsigned surface) { (void)surface; }
+void line_calibrate(unsigned surface) { calibration_request = surface; }
+unsigned line_calibration(void) { return calibration_result; }
 void terrain_set_armed(bool armed) { impact_armed = armed; }
 void terrain_begin_run(void) { }
 int tm_printf(UB *format, ...) { (void)format; return 0; }
@@ -168,11 +171,56 @@ static void check_tracking(void)
     assert(mission.steering <= 23);
 }
 
+static void check_setup(void)
+{
+    mission = (mission_t){0};
+    line = (line_sample_t){0};
+    car_faults = 0;
+    braking = true;
+    impact_armed = false;
+    terrain_sample_t terrain = {.ready = true};
+    motion_sample_t motion = {0};
+
+    publish_status(motion, line, terrain, (range_t){0});
+    assert(controller_status().plan == 1u);
+
+    button(1000000u, line, terrain, motion);
+    assert(calibration_request == CAL_WHITE && mission.phase == CAR_SETUP);
+    assert(braking && !impact_armed);
+    calibration_result = CAL_WHITE;
+    setup_step(1150000u);
+    publish_status(motion, line, terrain, (range_t){0});
+    assert(controller_status().plan == 2u);
+
+    button(2000000u, line, terrain, motion);
+    assert(calibration_request == CAL_BLACK && mission.phase == CAR_SETUP);
+    assert(braking && !impact_armed);
+    calibration_result = CAL_INVALID;
+    setup_step(2150000u);
+    publish_status(motion, line, terrain, (range_t){0});
+    assert(controller_status().plan == 4u && braking && !impact_armed);
+
+    button(3000000u, line, terrain, motion);
+    calibration_result = CAL_WHITE;
+    setup_step(3150000u);
+    button(4000000u, line, terrain, motion);
+    calibration_result = CAL_COMPLETE;
+    setup_step(4150000u);
+    assert(mission.phase == CAR_READY && braking && !impact_armed);
+
+    button(5000000u, line, terrain, motion);
+    assert(mission.phase == CAR_READY && braking && !impact_armed);
+    line = (line_sample_t){.calibrated = true, .visible = true, .time_us = 6000000u};
+    button(6000000u, line, terrain, motion);
+    assert(mission.phase == CAR_FOLLOW && impact_armed);
+}
+
 int main(void)
 {
+    check_setup();
     check_tracking();
     check_junction();
     check_avoidance();
-    puts("PASS line steering, MQTT remapping at junction, detour, line recovery and obstacle stop");
+    puts("PASS braked IR setup, line steering, MQTT remapping at junction, detour, line recovery and obstacle stop");
     return 0;
 }

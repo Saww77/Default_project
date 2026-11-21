@@ -34,7 +34,7 @@ Offsets are zero-based. Bit zero is the least significant bit of byte zero. Sign
 | 4 | 3 | Mission phase, Setup through Stopped |
 | 7 | 3 | Terrain event, Still through Impact |
 | 10 | 5 | Barcode, 0 unknown, 1–26 A–Z |
-| 15 | 3 | Obstacle plan, 0 stop, 1 continue, 2 left, 3 right, 4 reverse |
+| 15 | 3 | Obstacle plan. In IR setup, 0 unspecified, 1 white target, 2 black target, 3 sampling, 4 insufficient contrast |
 | 18 | 1 | Line in view |
 | 19 | 1 | Magnetometer contributes to yaw rate |
 | 20 | 8 | Stop, impact, motor/encoder, IMU, line, path, timing, no echo in that order |
@@ -52,7 +52,7 @@ Both images were linked for RP2040 in the same environment with Pico C SDK 2.3.1
 | Firmware | Data | BSS | Static RAM |
 | --- | ---: | ---: | ---: |
 | SE09 progress snapshot | 100 | 78,628 | 78,728 bytes |
-| Integrated firmware | 92 | 78,216 | 78,308 bytes |
+| Integrated firmware | 92 | 78,220 | 78,312 bytes |
 
 The static comparison excludes runtime allocations and stack high-water measurements. The four application task stacks request 1,600, 1,280, 1,200 and 960 bytes respectively, excluding kernel, USB and CYW43 stacks. Measure free heap and task stack high-water on the vehicle as part of the physical run.
 

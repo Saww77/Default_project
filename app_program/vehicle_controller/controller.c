@@ -101,6 +101,7 @@ static void button(uint32_t now, line_sample_t line, terrain_sample_t terrain,
     if (now - mission.last_button < 230000u || !hardware_button_held()) { return; }
     mission.last_button = now;
     if (mission.phase == CAR_SETUP) {
+        motion_stop();
         if (mission.setup == SETUP_WHITE || mission.setup == SETUP_BAD) {
             line_calibrate(CAL_WHITE);
             mission.setup = SETUP_WAIT;
@@ -457,7 +458,8 @@ static void publish_status(motion_sample_t motion, line_sample_t line, terrain_s
         .phase = mission.phase,
         .terrain = terrain.event,
         .barcode = mission.observed_barcode,
-        .plan = mission.obstacle.plan,
+        /* While calibrating, the obstacle-plan field carries the setup step. */
+        .plan = mission.phase == CAR_SETUP ? mission.setup + 1u : mission.obstacle.plan,
         .line = line.visible,
         .magnetic_rate = terrain.magnetic_rate,
     };

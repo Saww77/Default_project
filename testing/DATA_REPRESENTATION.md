@@ -52,7 +52,7 @@ Both images were linked for RP2040 in the same environment with Pico C SDK 2.3.1
 | Firmware | Data | BSS | Static RAM |
 | --- | ---: | ---: | ---: |
 | SE09 progress snapshot | 100 | 78,628 | 78,728 bytes |
-| Integrated firmware | 92 | 78,220 | 78,312 bytes |
+| Integrated firmware | 96 | 78,220 | 78,316 bytes |
 
 The static comparison excludes runtime allocations and stack high-water measurements. The four application task stacks request 1,600, 1,280, 1,200 and 960 bytes respectively, excluding kernel, USB and CYW43 stacks. Measure free heap and task stack high-water on the vehicle as part of the physical run.
 

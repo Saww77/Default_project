@@ -21,11 +21,13 @@ Use a 2.4 GHz network and put the car and broker on the same LAN. The example he
 
 ## Arm and run
 
+Use the two programmable switches on the Robo Pico carrier board. The M1A, M1B, M2A, and M2B switches directly test the motors. [Cytron button diagram](https://sg.cytron.io/tutorial/get-started-robo-pico-circuitpython-press-the-buttons)
+
 1. Check [TEAM.md](TEAM.md) and use the bench checks in [testing/README.md](testing/README.md). Verify wheel polarity, 3.3 V logic levels, servo direction and the stop button with the wheels raised.
-2. Power up on a flat, stationary surface and apply power to the IMU and sensors. Place all three IR sensors over matte white and tap GP21. When the console prompts, cover all three with matte black and tap GP21 again.
+2. Power up on a flat, stationary surface and apply power to the IMU and sensors. Place all three IR sensors over matte white and tap GP20. When the dashboard or console prompts, cover all three with matte black and tap GP20 again. The motors stay braked during both captures.
 3. Place GP26 and GP28 over the edges of the 18 mm track line. Mount the GP27 barcode reader on the **left of the car**, over the offset lane. The firmware decodes either bar order if the print passes under GP27. With a fixed left-side reader, arrange each approach so the printed lane is on the car's left.
 4. In the dashboard, assign the course letters A–Z to Left, Right, Straight, U-turn or Unassigned. Wait for confirmation from the car.
-5. Let the car settle upright on the track, then tap GP21 to start. GP20 applies the local emergency brake. The MQTT dashboard can request a stop. To resume after an operator stop, release GP20, align the car on the line and tap GP21 again. Reset the board after an impact, encoder, timing or IMU fault.
+5. Let the car settle upright on the track, then tap GP21 to start. After calibration, GP20 applies the local emergency brake. The MQTT dashboard can request a stop. To resume after an operator stop, release GP20, align the car on the line and tap GP21 again. Reset the board after an impact, encoder, timing or IMU fault.
 
 A decoded letter arms its configured action. The car continues to the next optical junction, advances the measured IR-to-axle distance, then executes the maneuver. Because the actual barcode-to-junction spacing was unavailable, the default requires an optical junction within 145 mm after decode. Measure and set `BARCODE_TO_JUNCTION_MM` to enable the encoder fallback on a course without a detectable broad marking. Set `IR_TO_AXLE_MM` to the measured distance on the car.
 

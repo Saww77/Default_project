@@ -26,6 +26,8 @@ typedef struct {
     bool magnetic_rate : 1;
 } car_status_t;
 
+/* Called by the GPIO IRQ for the two active-low board buttons. */
+void controller_button_pressed(unsigned pin);
 bool controller_start(void);
 car_status_t controller_status(void);
 

@@ -114,7 +114,7 @@ def check(broker_path, conf, port):
                     ir_setup = (3 | (2 << 15)).to_bytes(13, "little")
                     publish(robot, "/state", ir_setup)
                     waiting_black = until(status, lambda value: value["status"]["phase"] == "IR setup")
-                    assert "matte black" in waiting_black["status"]["setup"]
+                    assert "matte black and tap GP20" in waiting_black["status"]["setup"]
                     assert waiting_black["status"]["plan"] is None
                     assert fresh["routes"]["Z"] == 4
                     assert request("/api/routes", {"version": fresh["route_version"],

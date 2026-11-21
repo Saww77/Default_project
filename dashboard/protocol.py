@@ -10,10 +10,10 @@ TERRAIN = ("Stationary", "Cruising", "Accelerating", "Turning", "Climbing hump",
 PLANS = ("Stop", "Continue", "Bypass left", "Bypass right", "Reverse and rescan")
 IR_SETUP_STEPS = (
     None,
-    "Place all three IR sensors over white paper and tap GP21.",
-    "Place all three IR sensors over matte black and tap GP21.",
+    "Place all three IR sensors over white paper and tap GP20.",
+    "Place all three IR sensors over matte black and tap GP20.",
     "Taking IR readings. Keep the car still.",
-    "IR contrast is too low. Put all three sensors over white and tap GP21 to retry.",
+    "IR contrast is too low. Put all three sensors over white and tap GP20 to retry.",
 )
 FAULTS = ("Emergency stop", "Impact", "Motor or encoder", "IMU", "Line", "Blocked path",
           "Control timing", "No ultrasonic return")

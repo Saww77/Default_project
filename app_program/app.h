@@ -8,8 +8,8 @@
 #include <bsp/libbsp.h>
 
 enum {
-    EVENT_TICK = 1u, EVENT_STOP = 2u, EVENT_BUTTON = 4u,
-    EVENT_RANGE = 8u
+    EVENT_TICK = 1u, EVENT_STOP = 2u, EVENT_START = 4u,
+    EVENT_RANGE = 8u, EVENT_CALIBRATE = 16u
 };
 enum {
     FAULT_ESTOP = 1u, FAULT_COLLISION = 2u, FAULT_MOTION = 4u,

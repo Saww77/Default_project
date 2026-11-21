@@ -1,5 +1,6 @@
 #include "hardware.h"
 #include "car_config.h"
+#include "vehicle_controller/controller.h"
 
 #define REG(address) (*(volatile uint32_t *)(uintptr_t)(address))
 #define IO_BASE     0x40014000u
@@ -204,7 +205,7 @@ static void gpio_isr(UINT irq)
 
     (void)irq;
     if (gpio_pending(PIN_ESTOP) != 0u) {
-        car_fault(FAULT_ESTOP);
+        controller_button_pressed(PIN_ESTOP);
     }
     if (gpio_pending(PIN_ENCODER_LEFT) != 0u) {
         count_edge(0u);
@@ -217,7 +218,7 @@ static void gpio_isr(UINT irq)
         echo_edge(echo_bits);
     }
     if (gpio_pending(PIN_START) != 0u) {
-        (void)tk_set_flg(controller_events, EVENT_BUTTON);
+        controller_button_pressed(PIN_START);
     }
 }
 

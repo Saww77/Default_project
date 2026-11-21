@@ -14,7 +14,7 @@ The project uses the course template's Pico W BSP and its interrupt-backed ADC a
 | LSM303DLHC | GP4, GP5 | Buddy 4. I²C0 SDA/SCL. Connect external pull-ups to 3.3 V as required by the breakout |
 | Ultrasonic | GP16, GP17 | Buddy 5. Trigger output and interrupt-timestamped echo input. Divide or level-shift 5 V ECHO to Pico-safe levels |
 | Servo | GP12 | Buddy 5. 50 Hz PWM. Logical 90° is ahead and larger angles are left |
-| Board buttons | GP20, GP21 | GP20 stop, GP21 calibration/start. Active low |
+| Board buttons | GP20, GP21 | GP20 captures IR during setup and stops the car after setup. GP21 starts a calibrated car. Active low |
 | Pico W radio | Internal | Buddy 1. CYW43 and raw lwIP |
 | Debug | USB CDC | Calibration and startup diagnostics |
 
@@ -24,7 +24,7 @@ Smaller micro T-Kernel priority numbers run first. The shipped profile uses one 
 
 | Priority | Owner | Work |
 | --- | --- | --- |
-| IRQ 0 | GPIO and trigger timer | Apply brake on GP20, capture wheel and echo edges, end the 10 µs trigger pulse |
+| IRQ 0 | GPIO and trigger timer | Signal calibration or apply the brake on GP20, capture wheel and echo edges, and end the 10 µs trigger pulse |
 | IRQ 2 | BSP ADC and I²C | Complete conversions and transfers |
 | 3 | Vehicle controller and Buddy 2 | Sole software owner of motion requests and PWM decisions. Handles stop and range events and runs a 10 ms control release |
 | 4 | Buddy 4 terrain | 10 ms interrupt-backed IMU sampling. Calibrates attitude, classifies motion, integrates grade over measured wheel distance and triggers impact braking |

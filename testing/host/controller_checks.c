@@ -18,6 +18,8 @@ static obstacle_t profile;
 static bool profile_valid;
 static unsigned calibration_result;
 static unsigned calibration_request;
+static UINT pending_buttons;
+static bool gp20_held;
 
 void car_fault(uint8_t faults) { car_faults |= faults; braking = true; }
 void motion_stop(void) { braking = true; }
@@ -31,7 +33,13 @@ void motion_velocity(int left, int right)
 bool motion_move(int mm) { last_move = mm; braking = false; return true; }
 bool motion_turn(int degrees) { last_turn = degrees; braking = false; return true; }
 bool hardware_button_held(void) { return true; }
-bool hardware_estop_held(void) { return false; }
+bool hardware_estop_held(void) { return gp20_held; }
+INT tk_set_flg(ID id, UINT pattern)
+{
+    assert(id == controller_events);
+    pending_buttons |= pattern;
+    return 0;
+}
 void line_read_barcode(bool enabled) { (void)enabled; }
 void line_calibrate(unsigned surface) { calibration_request = surface; }
 unsigned line_calibration(void) { return calibration_result; }
@@ -66,7 +74,7 @@ static void check_junction(void)
     assert(route_config_apply(&routes));
 
     mission.phase = CAR_READY;
-    button(now, line, terrain, motion);
+    start_button(now, line, terrain, motion);
     assert(mission.phase == CAR_FOLLOW && impact_armed);
     set_letter('A');
     navigate(line, motion, now);
@@ -178,13 +186,24 @@ static void check_setup(void)
     car_faults = 0;
     braking = true;
     impact_armed = false;
+    pending_buttons = 0;
+    calibration_request = 0;
+    calibration_mode = true;
     terrain_sample_t terrain = {.ready = true};
     motion_sample_t motion = {0};
 
     publish_status(motion, line, terrain, (range_t){0});
     assert(controller_status().plan == 1u);
 
-    button(1000000u, line, terrain, motion);
+    controller_button_pressed(PIN_START);
+    assert(pending_buttons == 0u && calibration_request == 0u);
+    start_button(500000u, line, terrain, motion);
+    assert(mission.phase == CAR_SETUP && braking && !impact_armed);
+
+    gp20_held = true;
+    controller_button_pressed(PIN_ESTOP);
+    assert(pending_buttons == EVENT_CALIBRATE && car_faults == 0);
+    capture_button(1000000u);
     assert(calibration_request == CAL_WHITE && mission.phase == CAR_SETUP);
     assert(braking && !impact_armed);
     calibration_result = CAL_WHITE;
@@ -192,7 +211,7 @@ static void check_setup(void)
     publish_status(motion, line, terrain, (range_t){0});
     assert(controller_status().plan == 2u);
 
-    button(2000000u, line, terrain, motion);
+    capture_button(2000000u);
     assert(calibration_request == CAL_BLACK && mission.phase == CAR_SETUP);
     assert(braking && !impact_armed);
     calibration_result = CAL_INVALID;
@@ -200,19 +219,29 @@ static void check_setup(void)
     publish_status(motion, line, terrain, (range_t){0});
     assert(controller_status().plan == 4u && braking && !impact_armed);
 
-    button(3000000u, line, terrain, motion);
+    capture_button(3000000u);
     calibration_result = CAL_WHITE;
     setup_step(3150000u);
-    button(4000000u, line, terrain, motion);
+    capture_button(4000000u);
     calibration_result = CAL_COMPLETE;
     setup_step(4150000u);
-    assert(mission.phase == CAR_READY && braking && !impact_armed);
+    assert(mission.phase == CAR_READY && braking && !impact_armed && !calibration_mode);
 
-    button(5000000u, line, terrain, motion);
+    pending_buttons = 0;
+    controller_button_pressed(PIN_START);
+    assert(pending_buttons == EVENT_START && car_faults == 0);
+    start_button(5000000u, line, terrain, motion);
     assert(mission.phase == CAR_READY && braking && !impact_armed);
+    gp20_held = false;
     line = (line_sample_t){.calibrated = true, .visible = true, .time_us = 6000000u};
-    button(6000000u, line, terrain, motion);
+    start_button(6000000u, line, terrain, motion);
     assert(mission.phase == CAR_FOLLOW && impact_armed);
+    navigate(line, motion, 6000000u);
+    assert(!braking);
+
+    pending_buttons = 0;
+    controller_button_pressed(PIN_ESTOP);
+    assert((car_faults & FAULT_ESTOP) != 0u && pending_buttons == 0u && braking);
 }
 
 int main(void)

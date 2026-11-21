@@ -13,7 +13,8 @@ enum { DETOUR_TURN, DETOUR_OUT, DETOUR_FACE, DETOUR_PAST, DETOUR_INWARD,
        DETOUR_CROSS, DETOUR_RESTORE, DETOUR_REVERSE };
 
 typedef struct {
-    uint32_t last_button;
+    uint32_t last_start;
+    uint32_t last_capture;
     uint32_t line_at;
     uint32_t state_at;
     uint32_t run_origin;
@@ -42,6 +43,23 @@ typedef struct {
 
 static car_status_t shared;
 static mission_t mission;
+/* Written by the controller and read by the GPIO ISR on the same core. */
+static volatile bool calibration_mode = true;
+
+void controller_button_pressed(unsigned pin)
+{
+    bool calibrating = calibration_mode;
+
+    if (pin == PIN_ESTOP) {
+        if (calibrating) {
+            (void)tk_set_flg(controller_events, EVENT_CALIBRATE);
+        } else {
+            car_fault(FAULT_ESTOP);
+        }
+    } else if (pin == PIN_START && !calibrating) {
+        (void)tk_set_flg(controller_events, EVENT_START);
+    }
+}
 
 static int clamp(int value, int lo, int hi)
 {
@@ -55,6 +73,7 @@ static int absolute(int value)
 
 static void transition(unsigned phase, uint32_t now)
 {
+    calibration_mode = phase == CAR_SETUP;
     mission.phase = (uint8_t)phase;
     mission.state_at = now;
     terrain_set_armed(phase >= CAR_FOLLOW && phase <= CAR_REACQUIRE);
@@ -95,25 +114,32 @@ static void begin_follow(uint32_t now, line_sample_t line)
     transition(CAR_FOLLOW, now);
 }
 
-static void button(uint32_t now, line_sample_t line, terrain_sample_t terrain,
-                   motion_sample_t motion)
+static void capture_button(uint32_t now)
 {
-    if (now - mission.last_button < 230000u || !hardware_button_held()) { return; }
-    mission.last_button = now;
-    if (mission.phase == CAR_SETUP) {
-        motion_stop();
-        if (mission.setup == SETUP_WHITE || mission.setup == SETUP_BAD) {
-            line_calibrate(CAL_WHITE);
-            mission.setup = SETUP_WAIT;
-            tm_printf((UB *)"Sampling white\n");
-        } else if (mission.setup == SETUP_BLACK) {
-            line_calibrate(CAL_BLACK);
-            mission.setup = SETUP_WAIT;
-            tm_printf((UB *)"Sampling black\n");
-        }
+    if (mission.phase != CAR_SETUP || mission.setup == SETUP_WAIT ||
+        now - mission.last_capture < 230000u || !hardware_estop_held()) {
         return;
     }
-    if (mission.phase != CAR_READY && mission.phase != CAR_STOPPED) { return; }
+    mission.last_capture = now;
+    motion_stop();
+    if (mission.setup == SETUP_BLACK) {
+        line_calibrate(CAL_BLACK);
+        tm_printf((UB *)"Sampling black\n");
+    } else {
+        line_calibrate(CAL_WHITE);
+        tm_printf((UB *)"Sampling white\n");
+    }
+    mission.setup = SETUP_WAIT;
+}
+
+static void start_button(uint32_t now, line_sample_t line, terrain_sample_t terrain,
+                         motion_sample_t motion)
+{
+    if ((mission.phase != CAR_READY && mission.phase != CAR_STOPPED) ||
+        now - mission.last_start < 230000u || !hardware_button_held()) {
+        return;
+    }
+    mission.last_start = now;
 
     /* Local physical start can acknowledge course faults once the operator
      * has repositioned the car. Hardware, timing, and impact faults require reset. */
@@ -151,13 +177,13 @@ static void setup_step(uint32_t now)
     unsigned result = line_calibration();
     if (result == CAL_WHITE) {
         mission.setup = SETUP_BLACK;
-        tm_printf((UB *)"Place all three sensors over matte black. Press GP21.\n");
+        tm_printf((UB *)"Place all three sensors over matte black. Press GP20.\n");
     } else if (result == CAL_COMPLETE) {
         transition(CAR_READY, now);
         tm_printf((UB *)"Align on the track with GP27 over the barcode lane. Press GP21.\n");
     } else if (result == CAL_INVALID) {
         mission.setup = SETUP_BAD;
-        tm_printf((UB *)"IR contrast too low. Place all sensors over white and retry.\n");
+        tm_printf((UB *)"IR contrast too low. Place all sensors over white and press GP20.\n");
     }
 }
 
@@ -485,12 +511,13 @@ static void controller_task(INT argument, void *context)
 {
     UINT events;
     uint32_t last_control = app_us();
+    const UINT controller_mask = EVENT_TICK | EVENT_STOP | EVENT_START | EVENT_RANGE | EVENT_CALIBRATE;
 
     (void)argument;
     (void)context;
-    tm_printf((UB *)"Place all three IR sensors over white. Press GP21. GP20 stops.\n");
+    tm_printf((UB *)"Place all three IR sensors over white. GP20 captures. GP21 starts after calibration.\n");
     for (;;) {
-        (void)tk_wai_flg(controller_events, 31u, TWF_ORW | TWF_BITCLR, &events, TMO_FEVR);
+        (void)tk_wai_flg(controller_events, controller_mask, TWF_ORW | TWF_BITCLR, &events, TMO_FEVR);
         uint32_t now = app_us();
         range_t range = sonar_range();
         line_sample_t line = line_sample();
@@ -502,8 +529,11 @@ static void controller_task(INT argument, void *context)
             motion_stop();
             if (mission.phase != CAR_SETUP) { transition(CAR_STOPPED, now); }
         }
-        if ((events & EVENT_BUTTON) != 0u && (events & EVENT_STOP) == 0u) {
-            button(now, line, terrain, motion);
+        if ((events & EVENT_CALIBRATE) != 0u && (events & EVENT_STOP) == 0u) {
+            capture_button(now);
+        }
+        if ((events & EVENT_START) != 0u && (events & EVENT_STOP) == 0u) {
+            start_button(now, line, terrain, motion);
         }
         if (range_update) { update_range(range, now); }
         if ((events & EVENT_TICK) == 0u) {
